@@ -1,4 +1,7 @@
 """Application settings, loaded from .env."""
+from typing import Any
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,7 +15,21 @@ class Settings(BaseSettings):
     environment: str = "dev"  # dev | staging | prod
 
     # Database — no default: must come from .env or the environment.
+    # Accepts postgres:// (Render, Heroku-style dashboards), bare
+    # postgresql:// (Supabase, Neon), and the explicit postgresql+psycopg://
+    # used locally. Bare postgresql:// defaults to the psycopg2 driver, which
+    # is not installed here, and postgres:// is not a SQLAlchemy scheme at
+    # all — both are rewritten below, so pasting a dashboard value just works.
     database_url: str
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_database_scheme(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            for prefix in ("postgres://", "postgresql://"):
+                if value.startswith(prefix):
+                    return "postgresql+psycopg://" + value[len(prefix):]
+        return value
 
     # Auth — no default: must come from .env or the environment.
     # Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
@@ -95,6 +112,11 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from: str = "Talyn <no-reply@talyn.dev>"
+    # Resend HTTPS API. Preferred over SMTP wherever SMTP ports are blocked
+    # (Render's free tier blocks 25/465/587). Same templates, same logging —
+    # only the transport changes. Set = used instead of SMTP. The sender
+    # address must be verified in the Resend dashboard, or Resend rejects it.
+    resend_api_key: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

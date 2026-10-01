@@ -102,6 +102,43 @@ hadn't propagated yet. Wait a few minutes and it retries on its own.
 
 ---
 
+## Render (free tier) + Supabase
+
+The cheapest way to put a live link in front of someone. Render hosts the
+API; Supabase hosts Postgres. Render's own free database is deliberately not
+used — it expires 30 days after creation and is then deleted.
+
+```powershell
+# 1. Supabase: new project > Connect > direct connection string (port 5432,
+#    not the pooler). The app normalizes the scheme, so paste it as-is.
+
+# 2. Render: New > Blueprint > this repo. Render reads render.yaml and asks
+#    for the values marked sync:false:
+#      DATABASE_URL       the Supabase direct string from step 1
+#      RESEND_API_KEY     Resend > API Keys (SMTP ports are blocked on Render
+#                         free, so email goes over HTTPS — same templates)
+#      PAYSTACK_SECRET_KEY  sk_test_... while wiring up; live only for real $env:SECRET_KEY is auto-generated. Never paste a secret that sat in a
+#    file — this repo's history once held real keys, and they are burned.
+
+# 3. Migrations run inside the container on boot (see Dockerfile CMD), so the
+#    first deploy brings its own schema. Watch it:
+#    Render dashboard > service > Logs.
+```
+
+Verify: `https://<your-service>.onrender.com/health` then `/health/ready`
+(the second checks the database too).
+
+Caveats, all accepted deliberately for a demo box:
+
+- The service sleeps after 15 idle minutes; first request takes ~1 minute.
+  Warm it before a demo. A free uptime monitor on `/health` keeps it warm.
+- Supabase pauses after a week idle — one click resumes, data intact.
+- No ClamAV: uploads record `unscanned`. No Redis: rate limiting is
+  per-process, correct on one instance. No S3 yet: uploads fail closed.
+- Backups are Supabase's, not `scripts/backup.py` (no cron here).
+
+---
+
 ## Everyday operations
 
 ```powershell

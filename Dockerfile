@@ -71,12 +71,17 @@ EXPOSE 8000
 
 # Unversioned on purpose: the load balancer polls this, and it must not
 # depend on auth or the database being reachable in a specific order.
+# Honors $PORT (Render and friends inject it; default 10000) with a local
+# fallback, so the same image runs in compose and on a PaaS unchanged.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8000/health || exit 1
+    CMD curl -fsS http://127.0.0.1:${PORT:-8000}/health || exit 1
 
+# Migrate on boot, then serve. Render has no release phase, so the container
+# brings its own schema with it; `alembic upgrade head` is idempotent, which
+# is also what makes the compose `migrate` service safe to keep alongside.
 # One worker per container; scale with replicas instead. Multiple workers in
 # one container would each need their own connection pool.
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--forwarded-allow-ips", "*", \
-     "--no-server-header"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app \
+      --host 0.0.0.0 --port ${PORT:-8000} \
+      --proxy-headers --forwarded-allow-ips '*' \
+      --no-server-header"]

@@ -1,7 +1,13 @@
-"""Transactional email over SMTP.
+"""Transactional email, over SMTP or the Resend HTTPS API.
 
-Works with any provider that speaks SMTP: Resend, Postmark, SendGrid, SES,
-Mailgun, Gmail. Provider-specific API keys go in SMTP_USERNAME/SMTP_PASSWORD.
+SMTP works with any provider that speaks it: Resend, Postmark, SendGrid,
+SES, Mailgun, Gmail. Provider-specific API keys go in
+SMTP_USERNAME/SMTP_PASSWORD.
+
+The Resend API path exists because some hosts block SMTP ports outright
+(Render's free tier blocks 25/465/587) while HTTPS is always open. Set
+RESEND_API_KEY and it is used instead of SMTP — same templates, same
+logging, only the transport changes.
 
 Three deliberate choices:
 
@@ -25,6 +31,7 @@ import smtplib
 from email.message import EmailMessage
 from typing import Any
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -32,9 +39,11 @@ from app.models.email_log import FAILED, SENT, SKIPPED, EmailLog
 
 log = logging.getLogger("talyn.email")
 
+RESEND_API_URL = "https://api.resend.com/emails"
+
 
 class EmailError(Exception):
-    """Sending failed (misconfigured or upstream SMTP error)."""
+    """Sending failed (misconfigured or upstream error)."""
 
 
 # ── Brand ────────────────────────────────────────────────────────────────────
@@ -48,8 +57,8 @@ _BORDER = "#E8E2DC"
 
 
 def is_configured() -> bool:
-    """True when an SMTP server is configured."""
-    return bool(settings.smtp_host)
+    """True when any email provider is configured (Resend API or SMTP)."""
+    return bool(settings.resend_api_key or settings.smtp_host)
 
 
 def _smtp_settings() -> dict:
@@ -255,7 +264,7 @@ def send(
 ) -> bool:
     """Send one message and log the outcome. Never raises EmailError.
 
-    Returns True only when the SMTP server accepted the message. Business
+    Returns True only when the provider accepted the message. Business
     logic decides whether that matters — see the module docstring.
     """
     subject, html_body, text_body = message
@@ -263,8 +272,20 @@ def send(
     if not is_configured():
         log.warning("email not configured; skipped %s to %s", template, to_email)
         _record(db, user_id, to_email, template, subject, SKIPPED,
-                "SMTP_HOST is empty")
+                "No email provider configured (RESEND_API_KEY or SMTP_HOST)")
         return False
+
+    if settings.resend_api_key:
+        try:
+            _send_via_resend(to_email, subject, html_body, text_body)
+        except EmailError as e:
+            # Logged, not raised: a failed receipt must not undo a paid purchase.
+            log.error("email send failed (%s to %s): %s", template, to_email, e)
+            _record(db, user_id, to_email, template, subject, FAILED,
+                    str(e)[:500])
+            return False
+        _record(db, user_id, to_email, template, subject, SENT, None)
+        return True
 
     cfg = _smtp_settings()
     message_out = EmailMessage()
@@ -295,6 +316,37 @@ def send(
 
     _record(db, user_id, to_email, template, subject, SENT, None)
     return True
+
+
+def _send_via_resend(
+    to_email: str, subject: str, html_body: str, text_body: str
+) -> None:
+    """Deliver through the Resend HTTPS API. Raises EmailError on failure.
+
+    The sender address must be verified in the Resend dashboard — Resend
+    rejects unverified senders, and test-mode keys only deliver to the
+    account's own address.
+    """
+    try:
+        response = httpx.post(
+            RESEND_API_URL,
+            headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+            json={
+                "from": settings.smtp_from,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body,
+                "text": text_body,
+            },
+            timeout=15,
+        )
+    except httpx.HTTPError as e:
+        raise EmailError(f"Resend request failed: {e}") from e
+    if response.status_code >= 400:
+        raise EmailError(
+            f"Resend rejected the message "
+            f"({response.status_code}): {response.text[:200]}"
+        )
 
 
 def _authenticate_and_send(smtp: Any, cfg: dict, message: EmailMessage) -> None:
@@ -344,8 +396,9 @@ def send_or_raise(
     """
     if not is_configured():
         _record(db, user_id, to_email, template, message[0], SKIPPED,
-                "SMTP_HOST is empty")
-        raise EmailError("Email is not configured (SMTP_HOST is empty)")
+                "No email provider configured (RESEND_API_KEY or SMTP_HOST)")
+        raise EmailError(
+            "Email is not configured (RESEND_API_KEY or SMTP_HOST)")
     if not send(db, to_email=to_email, template=template, message=message,
                 user_id=user_id):
         raise EmailError("Email could not be sent")
@@ -355,7 +408,11 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
     """Backwards-compatible wrapper kept for existing callers."""
     subject, html_body, text_body = password_reset_email(reset_link)
     if not is_configured():
-        raise EmailError("Email is not configured (SMTP_HOST is empty)")
+        raise EmailError(
+            "Email is not configured (RESEND_API_KEY or SMTP_HOST)")
+    if settings.resend_api_key:
+        _send_via_resend(to_email, subject, html_body, text_body)
+        return
     cfg = _smtp_settings()
     message = EmailMessage()
     message["From"] = cfg["sender"]
