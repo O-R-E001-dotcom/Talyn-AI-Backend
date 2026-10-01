@@ -14,7 +14,17 @@ from app import models  # noqa: F401  (registers all tables on Base.metadata)
 config = context.config
 
 # Override the sqlalchemy.url with our .env-driven setting.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+#
+# Alembic stores options in a configparser using BasicInterpolation, which
+# treats "%" as an interpolation marker. A percent-encoded character in a
+# password (`%40` for "@", which Supabase's generated passwords need) is
+# therefore read as malformed interpolation and raises before SQLAlchemy ever
+# sees the URL — even though that same URL works fine for the app. Doubling
+# the percent signs is what BasicInterpolation requires to store a literal
+# one; SQLAlchemy then unescapes them back to the real password.
+config.set_main_option(
+    "sqlalchemy.url", settings.database_url.replace("%", "%%")
+)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:

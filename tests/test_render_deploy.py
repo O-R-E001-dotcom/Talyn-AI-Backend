@@ -55,6 +55,48 @@ def test_non_postgres_schemes_are_untouched():
     assert _settings("sqlite:///./dev.db").database_url == "sqlite:///./dev.db"
 
 
+def test_percent_encoded_password_survives_alembic():
+    """Alembic's configparser treats "%" as an interpolation marker.
+
+    Supabase's generated passwords contain characters like "@", which have to
+    be percent-encoded in a connection URI. Unescaped, that URL raises inside
+    alembic before SQLAlchemy ever sees it — while the same URL works fine for
+    the app itself, so the failure looks like a config problem, not a code one.
+    """
+    from alembic.config import Config
+    from sqlalchemy.engine import make_url
+
+    url = (
+        "postgresql://postgres:Talyned231606%40talynai"
+        "@db.example.supabase.co:5432/postgres"
+    )
+    normalized = _settings(url).database_url
+
+    cfg = Config("alembic.ini")
+    # What alembic/env.py does on every run.
+    cfg.set_main_option("sqlalchemy.url", normalized.replace("%", "%%"))
+
+    stored = cfg.get_main_option("sqlalchemy.url")
+    assert stored == normalized, "the URL must survive the round trip intact"
+
+    parsed = make_url(stored)
+    assert parsed.drivername == "postgresql+psycopg"
+    assert parsed.host == "db.example.supabase.co"
+    assert parsed.port == 5432
+    # Decoded back to the real password, not the percent-encoded form.
+    assert parsed.password == "Talyned231606@talynai"
+
+
+def test_plain_url_is_also_stored_intact():
+    """The escaping must not corrupt an ordinary URL."""
+    from alembic.config import Config
+
+    url = "postgresql+psycopg://talyn:pw@localhost:5432/talyn"
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    assert cfg.get_main_option("sqlalchemy.url") == url
+
+
 # ── Resend transport ─────────────────────────────────────────────────────────
 
 
