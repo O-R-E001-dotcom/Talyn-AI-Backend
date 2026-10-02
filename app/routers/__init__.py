@@ -3,7 +3,11 @@ from app.routers.auth import router as auth_router
 from app.routers.users import router as users_router
 from app.routers.courses import router as courses_router
 from app.routers.progress import router as progress_router
-from app.routers.missions import router as missions_router
+from app.routers.missions import (
+    catalog_router as missions_catalog_router,
+    router as missions_router,
+)
+from app.routers.creator_missions import router as creator_missions_router
 from app.routers.buddies import router as buddies_router
 from app.routers.admin import router as admin_router
 from app.routers.creators import router as creators_router
@@ -26,6 +30,8 @@ __all__ = [
     "courses_router",
     "progress_router",
     "missions_router",
+    "missions_catalog_router",
+    "creator_missions_router",
     "buddies_router",
     "admin_router",
     "creators_router",

@@ -1,20 +1,27 @@
-"""Missions router: accept AI-recommended missions, track steps, complete."""
+"""Missions: a learner adopts creator-written missions and works through them.
+
+Creating a mission is a creator action (app/routers/creator_missions.py). This
+router covers what a learner does with one: browse the catalogue, adopt, track
+steps, complete, drop.
+"""
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, optional_user
 from app.database import get_db
-from app.models import Badge, Mission, MissionStep, User
+from app.models import Badge, Mission, MissionStep, MissionTemplate, User
 from app.schemas.mission import (
     MISSION_STATUSES,
-    MissionCreate,
+    MissionAdopt,
+    MissionCatalogRead,
     MissionRead,
     MissionStatusUpdate,
 )
 from app.services.xp import award_xp
 
 router = APIRouter(prefix="/me/missions", tags=["Missions"])
+catalog_router = APIRouter(prefix="/missions", tags=["Missions"])
 
 
 def _complete_mission(db: Session, user: User, mission: Mission) -> dict:
@@ -64,13 +71,92 @@ def _get_owned_mission(db: Session, user: User, mission_id: int) -> Mission:
     return mission
 
 
+@catalog_router.get("", response_model=list[MissionCatalogRead])
+def browse_catalogue(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    viewer: User | None = Depends(optional_user),
+    db: Session = Depends(get_db),
+) -> list[MissionCatalogRead]:
+    """Published missions available to adopt.
+
+    Public on purpose: the catalogue is how a learner decides what to learn
+    next, and browsing it should not require an account. Unpublished templates
+    never appear here.
+    """
+    templates = list(
+        db.scalars(
+            select(MissionTemplate)
+            .where(MissionTemplate.published.is_(True))
+            .options(selectinload(MissionTemplate.steps))
+            .order_by(MissionTemplate.id.desc())
+            .limit(limit)
+            .offset(offset)
+        ).all()
+    )
+
+    # One query for everything the viewer has already adopted, rather than one
+    # per template: this list is rendered as a grid and N+1 would show.
+    mine: dict[int, int] = {}
+    if viewer is not None and templates:
+        rows = db.execute(
+            select(Mission.template_id, Mission.id).where(
+                Mission.user_id == viewer.id,
+                Mission.template_id.in_([t.id for t in templates]),
+            )
+        ).all()
+        mine = {tid: mid for tid, mid in rows if tid is not None}
+
+    out = []
+    for template in templates:
+        creator = db.get(User, template.creator_user_id)
+        adopted_id = mine.get(template.id)
+        out.append(
+            MissionCatalogRead(
+                **{
+                    field: getattr(template, field)
+                    for field in (
+                        "id", "title", "description", "purpose",
+                        "reward_xp", "badge", "published",
+                    )
+                },
+                steps=template.steps,
+                creator_name=(creator.learner_name if creator else ""),
+                adopted=adopted_id is not None,
+                adopted_mission_id=adopted_id,
+            )
+        )
+    return out
+
+
 @router.post("", response_model=MissionRead, status_code=status.HTTP_201_CREATED)
-def accept_mission(
-    payload: MissionCreate,
+def adopt_mission(
+    payload: MissionAdopt,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Mission:
-    """Accept an AI-recommended mission. One active mission at a time."""
+    """Adopt a published mission from the catalogue.
+
+    Copies the template's content rather than linking to it, because progress
+    is per learner: two learners on the same mission must not share step
+    completion. The copy also means editing the template later cannot rewrite
+    a mission someone is already halfway through.
+
+    One active mission at a time — the product treats a mission as the single
+    thing a learner is working on, which is what makes "finish or complete
+    mission N first" a useful nudge rather than an obstacle.
+    """
+    template = db.scalar(
+        select(MissionTemplate)
+        .where(MissionTemplate.id == payload.template_id,
+               MissionTemplate.published.is_(True))
+        .options(selectinload(MissionTemplate.steps))
+    )
+    if template is None:
+        # 404 covers both "no such template" and "not published": a learner
+        # should not be able to discover drafts by guessing ids.
+        raise HTTPException(status_code=404, detail="Mission not available")
+
     active = db.scalar(
         select(Mission).where(
             Mission.user_id == current_user.id, Mission.status == "in_progress"
@@ -82,16 +168,28 @@ def accept_mission(
             detail=f"Finish or complete mission {active.id} first",
         )
 
+    already = db.scalar(
+        select(Mission).where(
+            Mission.user_id == current_user.id, Mission.template_id == template.id
+        )
+    )
+    if already is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="You have already taken this mission",
+        )
+
     mission = Mission(
         user_id=current_user.id,
-        title=payload.title,
-        description=payload.description,
-        purpose=payload.purpose,
-        reward_xp=payload.reward_xp,
-        badge=payload.badge,
+        template_id=template.id,
+        title=template.title,
+        description=template.description,
+        purpose=template.purpose,
+        reward_xp=template.reward_xp,
+        badge=template.badge,
         status="in_progress",
     )
-    for step in payload.steps:
+    for step in template.steps:
         mission.steps.append(
             MissionStep(
                 title=step.title, description=step.description, order=step.order
@@ -111,7 +209,7 @@ def list_missions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[Mission]:
-    """List the learner's missions, optionally filtered by status."""
+    """List the learner's adopted missions, optionally filtered by status."""
     query = (
         select(Mission)
         .where(Mission.user_id == current_user.id)

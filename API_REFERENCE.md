@@ -25,7 +25,7 @@ Money is always integer minor units (kobo). Timestamps are UTC ISO-8601.
 
 ---
 
-96 endpoints across 15 areas.
+103 endpoints across 16 areas.
 
 ## Admin
 
@@ -771,6 +771,173 @@ array of objects
 | `estimated_minutes` | integer | yes | — |
 | `content` | string *(nullable)* | no | — |
 | `is_published` | boolean | yes | — |
+
+- **422** Validation Error
+
+
+## Creator Missions
+
+| | Method | Path | Auth | Wired |
+|---|---|---|---|---|
+| | `GET` | `/v1/creator/missions` | 🔒 user | ✓ |
+| | `POST` | `/v1/creator/missions` | 🔒 user | ✓ |
+| | `DELETE` | `/v1/creator/missions/{template_id}` | 🔒 user | ✓ |
+| | `GET` | `/v1/creator/missions/{template_id}` | 🔒 user | ✓ |
+| | `PATCH` | `/v1/creator/missions/{template_id}` | 🔒 user | ✓ |
+| | `GET` | `/v1/creator/missions/{template_id}/adoption` | 🔒 user | ✓ |
+
+### GET /v1/creator/missions
+
+Every template the signed-in creator has written, published or not.
+
+**Responses**
+
+**200**
+
+array of objects
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | — |
+| `title` | string | yes | — |
+| `description` | string | yes | — |
+| `purpose` | string | yes | — |
+| `reward_xp` | integer | yes | — |
+| `badge` | string *(nullable)* | yes | — |
+| `published` | boolean | yes | — |
+| `steps` | array of MissionTemplateStep | no | default `[]` |
+
+
+### POST /v1/creator/missions
+
+Create a mission template. Starts unpublished — set `published` to list it.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `title` | string | yes | — |
+| `description` | string | no | default `` |
+| `purpose` | string | no | default `` |
+| `reward_xp` | integer | no | default `100` |
+| `badge` | string *(nullable)* | no | — |
+| `steps` | array of MissionStepCreate | no | — |
+
+<details><summary><code>steps</code> object</summary>
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `title` | string | yes | — |
+| `description` | string | no | default `` |
+| `order` | integer | yes | — |
+
+</details>
+
+
+**Responses**
+
+**201**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | — |
+| `title` | string | yes | — |
+| `description` | string | yes | — |
+| `purpose` | string | yes | — |
+| `reward_xp` | integer | yes | — |
+| `badge` | string *(nullable)* | yes | — |
+| `published` | boolean | yes | — |
+| `steps` | array of MissionTemplateStep | no | default `[]` |
+
+- **422** Validation Error
+
+
+### DELETE /v1/creator/missions/{template_id}
+
+Withdraw a template from the catalogue.
+
+Learners who already adopted it keep their mission, because adoption
+copies the content — nobody's work in progress is cancelled.
+
+**Responses**
+
+**200**
+
+object
+
+- **422** Validation Error
+
+
+### GET /v1/creator/missions/{template_id}
+
+One of the creator's own templates.
+
+**Responses**
+
+**200**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | — |
+| `title` | string | yes | — |
+| `description` | string | yes | — |
+| `purpose` | string | yes | — |
+| `reward_xp` | integer | yes | — |
+| `badge` | string *(nullable)* | yes | — |
+| `published` | boolean | yes | — |
+| `steps` | array of MissionTemplateStep | no | default `[]` |
+
+- **422** Validation Error
+
+
+### PATCH /v1/creator/missions/{template_id}
+
+Edit a template.
+
+Existing adopted missions keep the wording they were adopted with: a
+learner part-way through "Build a button" should not find it renamed
+tomorrow. Only later adopters see the new text.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `title` | string *(nullable)* | no | — |
+| `description` | string *(nullable)* | no | — |
+| `purpose` | string *(nullable)* | no | — |
+| `reward_xp` | integer *(nullable)* | no | — |
+| `badge` | string *(nullable)* | no | — |
+| `published` | boolean *(nullable)* | no | — |
+| `steps` | array of MissionStepCreate *(nullable)* | no | — |
+
+
+**Responses**
+
+**200**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | — |
+| `title` | string | yes | — |
+| `description` | string | yes | — |
+| `purpose` | string | yes | — |
+| `reward_xp` | integer | yes | — |
+| `badge` | string *(nullable)* | yes | — |
+| `published` | boolean | yes | — |
+| `steps` | array of MissionTemplateStep | no | default `[]` |
+
+- **422** Validation Error
+
+
+### GET /v1/creator/missions/{template_id}/adoption
+
+How many learners took this mission, and how many finished it.
+
+**Responses**
+
+**200**
+
+object
 
 - **422** Validation Error
 
@@ -1650,10 +1817,11 @@ object
 | | `GET` | `/v1/me/missions/{mission_id}` | 🔒 user | ✓ |
 | | `PATCH` | `/v1/me/missions/{mission_id}` | 🔒 user | ✓ |
 | | `POST` | `/v1/me/missions/{mission_id}/steps/{step_id}/complete` | 🔒 user | ✓ |
+| | `GET` | `/v1/missions` | ○ optional | ✓ |
 
 ### GET /v1/me/missions
 
-List the learner's missions, optionally filtered by status.
+List the learner's adopted missions, optionally filtered by status.
 
 **Responses**
 
@@ -1670,6 +1838,7 @@ array of objects
 | `reward_xp` | integer | yes | — |
 | `badge` | string *(nullable)* | yes | — |
 | `status` | string | yes | — |
+| `template_id` | integer *(nullable)* | no | — |
 | `steps` | array of MissionStep | no | default `[]` |
 
 - **422** Validation Error
@@ -1677,28 +1846,22 @@ array of objects
 
 ### POST /v1/me/missions
 
-Accept an AI-recommended mission. One active mission at a time.
+Adopt a published mission from the catalogue.
+
+Copies the template's content rather than linking to it, because progress
+is per learner: two learners on the same mission must not share step
+completion. The copy also means editing the template later cannot rewrite
+a mission someone is already halfway through.
+
+One active mission at a time — the product treats a mission as the single
+thing a learner is working on, which is what makes "finish or complete
+mission N first" a useful nudge rather than an obstacle.
 
 **Request body**
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `title` | string | yes | — |
-| `description` | string | no | default `` |
-| `purpose` | string | no | default `` |
-| `reward_xp` | integer | no | default `100` |
-| `badge` | string *(nullable)* | no | — |
-| `steps` | array of MissionStepCreate | no | — |
-
-<details><summary><code>steps</code> object</summary>
-
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `title` | string | yes | — |
-| `description` | string | no | default `` |
-| `order` | integer | yes | — |
-
-</details>
+| `template_id` | integer | yes | — |
 
 
 **Responses**
@@ -1714,6 +1877,7 @@ Accept an AI-recommended mission. One active mission at a time.
 | `reward_xp` | integer | yes | — |
 | `badge` | string *(nullable)* | yes | — |
 | `status` | string | yes | — |
+| `template_id` | integer *(nullable)* | no | — |
 | `steps` | array of MissionStep | no | default `[]` |
 
 - **422** Validation Error
@@ -1749,6 +1913,7 @@ Get one of the learner's missions with its steps.
 | `reward_xp` | integer | yes | — |
 | `badge` | string *(nullable)* | yes | — |
 | `status` | string | yes | — |
+| `template_id` | integer *(nullable)* | no | — |
 | `steps` | array of MissionStep | no | default `[]` |
 
 - **422** Validation Error
@@ -1785,6 +1950,37 @@ Complete one mission step. Finishing the last step completes the mission.
 **200**
 
 object
+
+- **422** Validation Error
+
+
+### GET /v1/missions
+
+Published missions available to adopt.
+
+Public on purpose: the catalogue is how a learner decides what to learn
+next, and browsing it should not require an account. Unpublished templates
+never appear here.
+
+**Responses**
+
+**200**
+
+array of objects
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | — |
+| `title` | string | yes | — |
+| `description` | string | yes | — |
+| `purpose` | string | yes | — |
+| `reward_xp` | integer | yes | — |
+| `badge` | string *(nullable)* | yes | — |
+| `published` | boolean | yes | — |
+| `steps` | array of MissionTemplateStep | no | default `[]` |
+| `creator_name` | string | no | default `` |
+| `adopted` | boolean | no | default `False` |
+| `adopted_mission_id` | integer *(nullable)* | no | — |
 
 - **422** Validation Error
 

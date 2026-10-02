@@ -37,6 +37,7 @@ class User(Base):
     lesson_progress: Mapped[list["LessonProgress"]] = relationship(back_populates="user")  # noqa: F821
     badges: Mapped[list["Badge"]] = relationship(back_populates="user")  # noqa: F821
     missions: Mapped[list["Mission"]] = relationship(back_populates="user")  # noqa: F821
+    mission_templates: Mapped[list["MissionTemplate"]] = relationship(back_populates="creator")  # noqa: F821
 
     def __repr__(self) -> str:
         return f"<User id={self.id} name={self.learner_name!r}>"

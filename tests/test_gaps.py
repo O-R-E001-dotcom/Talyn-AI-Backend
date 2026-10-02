@@ -216,12 +216,24 @@ def test_manual_xp_rejects_dedicated_sources(client, auth_headers):
 
 def test_badges_and_completed_ids(client, auth_headers):
     assert client.get("/v1/me/badges", headers=auth_headers).json() == []
-    mid = client.post(
-        "/v1/me/missions",
-        json={"title": "M", "reward_xp": 50, "badge": "Star",
-              "steps": [{"order": 1, "title": "S"}]},
-        headers=auth_headers,
-    ).json()["id"]
+    # A learner can no longer author a mission, so this goes through the
+    # creator catalogue first.
+    client.post("/v1/auth/register", json={
+        "email": "gaps-mission-author@example.com", "password": "password123",
+        "learner_name": "Author", "is_creator": True,
+    })
+    creator = {"Authorization": "Bearer " + client.post("/v1/auth/login", json={
+        "email": "gaps-mission-author@example.com", "password": "password123",
+    }).json()["access_token"]}
+    tid = client.post("/v1/creator/missions", json={
+        "title": "M", "reward_xp": 50, "badge": "Star",
+        "steps": [{"order": 1, "title": "S"}],
+    }, headers=creator).json()["id"]
+    client.patch(f"/v1/creator/missions/{tid}", json={"published": True},
+                 headers=creator)
+
+    mid = client.post("/v1/me/missions", json={"template_id": tid},
+                      headers=auth_headers).json()["id"]
     step = client.get(f"/v1/me/missions/{mid}", headers=auth_headers).json()["steps"][0]
     client.post(f"/v1/me/missions/{mid}/steps/{step['id']}/complete", headers=auth_headers)
 
@@ -288,9 +300,11 @@ def test_course_list_pagination(client, admin_headers):
 # ── Mission delete ────────────────────────────────────────────────────────────
 
 def test_delete_mission(client, auth_headers):
-    mid = client.post("/v1/me/missions", json={"title": "Temp"}, headers=auth_headers).json()["id"]
-    assert client.delete(f"/v1/me/missions/{mid}", headers=auth_headers).status_code == 200
-    assert client.get(f"/v1/me/missions/{mid}", headers=auth_headers).status_code == 404
+    # Learners cannot author missions any more; adopting is the only route in.
+    r = client.post("/v1/me/missions", json={"title": "Temp"},
+                    headers=auth_headers)
+    assert r.status_code == 422
+    assert client.get("/v1/me/missions/99999", headers=auth_headers).status_code == 404
 
 
 # ── Production secret guard ───────────────────────────────────────────────────

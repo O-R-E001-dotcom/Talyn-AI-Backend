@@ -2,7 +2,7 @@
 import pytest
 
 
-def _register(client, email, name):
+def _register(client, email, name, is_creator=False):
     client.post(
         "/v1/auth/register",
         json={
@@ -12,6 +12,7 @@ def _register(client, email, name):
             "difficulty_level": "beginner",
             "goals": "Learn fast",
             "interests": ["design"],
+            "is_creator": is_creator,
         },
     )
     r = client.post(
@@ -46,8 +47,24 @@ MISSION = {
 
 
 @pytest.fixture()
-def mission_id(client, auth_headers):
-    r = client.post("/v1/me/missions", json=MISSION, headers=auth_headers)
+def mission_template_id(client):
+    """Missions are creator-authored now, so a catalogue entry has to exist
+    before a learner can adopt one. See tests/test_missions.py for the
+    catalogue's own rules."""
+    creator = _register(client, "missions-author@example.com", "Author",
+                        is_creator=True)
+    created = client.post("/v1/creator/missions", json=MISSION, headers=creator)
+    assert created.status_code == 201, created.text
+    tid = created.json()["id"]
+    client.patch(f"/v1/creator/missions/{tid}", json={"published": True},
+                 headers=creator)
+    return tid
+
+
+@pytest.fixture()
+def mission_id(client, auth_headers, mission_template_id):
+    r = client.post("/v1/me/missions", json={"template_id": mission_template_id},
+                    headers=auth_headers)
     assert r.status_code == 201, r.text
     return r.json()["id"]
 
@@ -64,7 +81,16 @@ def test_accept_mission(client, auth_headers, mission_id):
 
 
 def test_one_active_mission_at_a_time(client, auth_headers, mission_id):
-    r = client.post("/v1/me/missions", json=MISSION, headers=auth_headers)
+    """A second *catalogue* mission is refused while one is in progress."""
+    creator = _register(client, "missions-author-2@example.com", "Author2",
+                        is_creator=True)
+    other = client.post("/v1/creator/missions",
+                        json={**MISSION, "title": "A different quest"},
+                        headers=creator).json()
+    client.patch(f"/v1/creator/missions/{other['id']}",
+                 json={"published": True}, headers=creator)
+    r = client.post("/v1/me/missions", json={"template_id": other["id"]},
+                    headers=auth_headers)
     assert r.status_code == 409
 
 
@@ -154,9 +180,10 @@ def test_context_shows_active_mission(client, auth_headers, mission_id):
     assert len(ctx["missions"]["active_mission"]["steps"]) == 2
 
 
-def test_me_endpoints_require_auth(client, mission_id):
+def test_me_endpoints_require_auth(client, mission_id, mission_template_id):
     assert client.get("/v1/me/missions").status_code == 401
-    assert client.post("/v1/me/missions", json=MISSION).status_code == 401
+    r = client.post("/v1/me/missions", json={"template_id": mission_template_id})
+    assert r.status_code == 401
 
 
 # ── Buddy matches ─────────────────────────────────────────────────────────────

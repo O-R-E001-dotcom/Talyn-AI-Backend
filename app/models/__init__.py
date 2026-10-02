@@ -2,7 +2,12 @@
 from app.models.user import User
 from app.models.course import Course, CourseModule, Enrollment, Lesson, LessonProgress
 from app.models.learning import Badge, QuizResult, StudyPlan, XpEvent
-from app.models.mission import Mission, MissionStep
+from app.models.mission import (
+    Mission,
+    MissionStep,
+    MissionTemplate,
+    MissionTemplateStep,
+)
 from app.models.buddy import BuddyMatch
 from app.models.conversation import ConversationMessage
 from app.models.admin import AdminAuditLog
@@ -26,6 +31,8 @@ __all__ = [
     "XpEvent",
     "Mission",
     "MissionStep",
+    "MissionTemplate",
+    "MissionTemplateStep",
     "BuddyMatch",
     "ConversationMessage",
     "AdminAuditLog",

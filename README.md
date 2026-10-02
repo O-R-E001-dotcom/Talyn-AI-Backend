@@ -121,12 +121,19 @@ open with a logged warning so a cache blip never takes the API down).
 | `POST` | `/v1/me/conversation` | Store a chat turn (user/assistant) | yes |
 | `GET`  | `/v1/me/conversation` | Read chat turns, chronological (`?limit&offset`) | yes |
 | `DELETE` | `/v1/me/conversation` | Clear stored chat turns        | yes |
-| `POST` | `/v1/me/missions`   | Accept an AI-recommended mission (one active at a time) | yes |
-| `GET`  | `/v1/me/missions`   | List missions (`?status&limit&offset`) | yes |
-| `GET`  | `/v1/me/missions/{id}` | Get a mission with steps            | yes |
+| `GET`  | `/v1/missions`      | Browse the published mission catalogue (public) | no |
+| `POST` | `/v1/me/missions`   | Adopt a catalogue mission (`{template_id}`; one active at a time) | yes |
+| `GET`  | `/v1/me/missions`   | List my adopted missions (`?status&limit&offset`) | yes |
+| `GET`  | `/v1/me/missions/{id}` | Get one of my missions with steps            | yes |
 | `PATCH`| `/v1/me/missions/{id}` | Change status (completed awards XP + badge) | yes |
 | `POST` | `/v1/me/missions/{id}/steps/{step_id}/complete` | Complete a step (last step completes mission) | yes |
-| `DELETE` | `/v1/me/missions/{id}` | Delete a mission + steps       | yes |
+| `DELETE` | `/v1/me/missions/{id}` | Drop a mission + steps       | yes |
+| `POST` | `/v1/creator/missions` | Write a mission template (draft until published) | creator |
+| `GET`  | `/v1/creator/missions` | My templates                | creator |
+| `GET`  | `/v1/creator/missions/{id}` | One of my templates      | creator |
+| `PATCH`| `/v1/creator/missions/{id}` | Edit / publish / withdraw | creator |
+| `DELETE`| `/v1/creator/missions/{id}` | Withdraw from the catalogue (adopted copies survive) | creator |
+| `GET`  | `/v1/creator/missions/{id}/adoption` | How many learners took it | creator |
 | `POST` | `/v1/me/buddies/matches` | Save an AI-ranked buddy match      | yes |
 | `GET`  | `/v1/me/buddies/matches` | List saved buddy matches (`?limit&offset`) | yes |
 | `PATCH`| `/v1/me/buddies/matches/{id}` | Accept/decline a match          | yes |
