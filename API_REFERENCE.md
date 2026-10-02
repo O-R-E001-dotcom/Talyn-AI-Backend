@@ -53,6 +53,22 @@ message naming what is missing. Reads stay open. Treat 409 here as
 Google sign-in skips verification (Google already proved the address)
 but still goes through pace + interests.
 
+### Where those values live
+
+`GET /v1/users/me` returns the profile only — name, email, interests,
+difficulty, goals, timestamps. It deliberately does **not** carry
+`email_verified_at`, `learning_pace` or `onboarding_completed_at`, so
+do not go looking for them there. `GET /v1/onboarding/status` is the
+single read for all of it, including `next_step`: one call decides
+which screen comes next.
+
+Two further 409s come from `POST /v1/me/missions`, unrelated to
+onboarding: `Finish or complete mission N first` (one active mission
+at a time) and `You have already taken this mission`. Both are normal
+states rather than failures — `GET /v1/missions` already reports
+`adopted` and `adopted_mission_id` per catalogue entry, so the adopt
+button can be hidden before either is ever hit.
+
 ---
 
 108 endpoints across 17 areas.
