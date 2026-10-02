@@ -1,6 +1,6 @@
 # Talyn API reference
 
-Generated from the application's OpenAPI schema — do not edit by hand.
+Generated from the application's OpenAPI schema.
 Regenerate with `python -m scripts.generate_api_reference`.
 
 ## Conventions
