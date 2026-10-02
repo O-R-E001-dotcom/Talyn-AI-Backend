@@ -39,15 +39,17 @@ services:
       # it. Until then, only the Resend account's own address receives mail.
       - key: SMTP_FROM
         value: Talyn <no-reply@talyn.dev>
-      # Where email links and Paystack redirects point. No frontend is
-      # deployed, so while testing against a local UI this is localhost.
+      # Where email links and Paystack redirects point. The UI runs on Vercel;
+      # these are origins, so no trailing slash.
       - key: FRONTEND_URL
-        value: http://localhost:3000
+        value: https://talyn-frontend.vercel.app
       - key: PAYMENT_RETURN_URL
-        value: http://localhost:3000
-      # Every browser call is cross-origin here, so this list is load-bearing.
+        value: https://talyn-frontend.vercel.app
+      # Every browser call is cross-origin here, so this list is load-bearing:
+      # an origin missing from it gets a CORS rejection, not data. localhost is
+      # kept so the UI can also be run locally against the deployed API.
       - key: CORS_ORIGINS
-        value: http://localhost:3000
+        value: https://talyn-frontend.vercel.app,http://localhost:3000
       # Paystack test key (sk_test_...) while wiring up; live key only when
       # deliberately taking real money.
       - key: PAYSTACK_SECRET_KEY
