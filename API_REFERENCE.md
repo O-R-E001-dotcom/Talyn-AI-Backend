@@ -23,9 +23,39 @@ of objects in `detail` instead.
 
 Money is always integer minor units (kobo). Timestamps are UTC ISO-8601.
 
+## Signup and onboarding flow
+
+New accounts go through this order. Enforce it client-side with
+`GET /v1/onboarding/status` — its `next_step` is the single value the
+client routes on (`verify_email` → `choose_pace` → `choose_interests`
+→ `complete` → `done`). Do not reimplement the order in the frontend;
+two implementations of it will disagree.
+
+1. `POST /v1/auth/register` — creates the account and emails a
+   verification link (`/verify-email?token=...`). The welcome email
+   is held back until the address is confirmed.
+2. `POST /v1/auth/email-verification/confirm` — proves the address.
+   Links are single-use and expire after 24 hours. Re-request with
+   `POST /v1/auth/email-verification/request`, which answers
+   identically for known and unknown addresses.
+3. `GET /v1/onboarding/options` (public) — the pace list and the
+   interest list. Render pickers from this; never hardcode the
+   options, or the client will offer values the API rejects.
+4. `POST /v1/onboarding/complete` (`learning_pace` + `interests`) —
+   records both and seeds the study plan's daily goal from the pace.
+   Repeatable: changing pace later re-seeds the plan.
+
+Until onboarding completes, enrolment, lesson start/complete, quiz
+results, mission adoption and mission steps answer **409** with a
+message naming what is missing. Reads stay open. Treat 409 here as
+'route into onboarding', not as an error screen.
+
+Google sign-in skips verification (Google already proved the address)
+but still goes through pace + interests.
+
 ---
 
-103 endpoints across 16 areas.
+108 endpoints across 17 areas.
 
 ## Admin
 
@@ -140,6 +170,8 @@ Change a user's roles. Self-demotion is rejected; changes are logged.
 | | Method | Path | Auth | Wired |
 |---|---|---|---|---|
 | | `GET` | `/v1/auth/email-available` | — public | ✓ |
+| | `POST` | `/v1/auth/email-verification/confirm` | — public | — |
+| | `POST` | `/v1/auth/email-verification/request` | — public | — |
 | | `POST` | `/v1/auth/google` | — public | ✓ |
 | | `POST` | `/v1/auth/login` | — public | ✓ |
 | | `POST` | `/v1/auth/password-reset/confirm` | — public | ✓ |
@@ -153,6 +185,55 @@ Check whether an email can register (used for instant signup feedback).
 
 Rejects malformed addresses with 422. Like every public signup form,
 this intentionally reveals whether an address is taken.
+
+**Responses**
+
+**200**
+
+object
+
+- **422** Validation Error
+
+
+### POST /v1/auth/email-verification/confirm
+
+Mark an address verified using the emailed token.
+
+The token is spent in the same transaction that stamps the verification, so
+a link that worked once cannot be replayed. Confirming an already-verified
+address succeeds rather than erroring: a user clicking a second email from
+their inbox should not be shown a failure.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | yes | — |
+
+
+**Responses**
+
+**200**
+
+object
+
+- **422** Validation Error
+
+
+### POST /v1/auth/email-verification/request
+
+(Re)send the verification link.
+
+Idempotent and non-disclosing: an already-verified address and an unknown
+one get the same response and roughly the same work, so this cannot be used
+to discover who has an account.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email` | string | yes | — |
+
 
 **Responses**
 
@@ -1983,6 +2064,84 @@ array of objects
 | `adopted_mission_id` | integer *(nullable)* | no | — |
 
 - **422** Validation Error
+
+
+## Onboarding
+
+| | Method | Path | Auth | Wired |
+|---|---|---|---|---|
+| | `POST` | `/v1/onboarding/complete` | 🔒 user | — |
+| | `GET` | `/v1/onboarding/options` | — public | — |
+| | `GET` | `/v1/onboarding/status` | 🔒 user | — |
+
+### POST /v1/onboarding/complete
+
+Record pace and interests, and seed the study plan.
+
+Requires a verified address: pace and interests are personal choices about
+how a specific person learns, and letting an unproven address set them
+would mean anyone who can be spammed into signing up can shape someone's
+plan.
+
+Repeatable — changing your pace later is normal, and an account that had to
+ask a support question to change a setting would be a support question.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `learning_pace` | string | yes | — |
+| `interests` | array of string | yes | — |
+
+
+**Responses**
+
+**200**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email_verified` | boolean | yes | — |
+| `onboarding_completed` | boolean | yes | — |
+| `learning_pace` | string *(nullable)* | yes | — |
+| `interests` | array of string | yes | — |
+| `next_step` | string | yes | — |
+
+- **422** Validation Error
+
+
+### GET /v1/onboarding/options
+
+Pace and interest options, server-side.
+
+The pickers read this rather than hardcoding a list: a client with its own
+copy will eventually offer something the API rejects.
+
+**Responses**
+
+**200**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `paces` | array of PaceOption | yes | — |
+| `interests` | array of terestOption | yes | — |
+| `default_pace` | string | yes | — |
+
+
+### GET /v1/onboarding/status
+
+Where this account is in onboarding, and what comes next.
+
+**Responses**
+
+**200**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email_verified` | boolean | yes | — |
+| `onboarding_completed` | boolean | yes | — |
+| `learning_pace` | string *(nullable)* | yes | — |
+| `interests` | array of string | yes | — |
+| `next_step` | string | yes | — |
 
 
 ## Payments
