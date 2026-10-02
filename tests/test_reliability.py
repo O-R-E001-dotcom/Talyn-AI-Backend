@@ -7,7 +7,7 @@ from app.core import rate_limit
 
 
 @pytest.fixture()
-def auth_headers(client):
+def auth_headers(client, onboard):
     client.post(
         "/v1/auth/register",
         json={"email": "amina2@example.com", "password": "secret12345",
@@ -15,10 +15,9 @@ def auth_headers(client):
     )
     r = client.post("/v1/auth/login", json={"email": "amina2@example.com",
                                             "password": "secret12345"})
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
-
-
-# ── Audit trail survives account deletion ─────────────────────────────────────
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    onboard(headers)
+    return headers
 
 def test_delete_target_keeps_audit_trail(client, auth_headers, admin_headers):
     me = client.get("/v1/users/me", headers=auth_headers).json()

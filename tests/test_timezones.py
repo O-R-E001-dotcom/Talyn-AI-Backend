@@ -95,7 +95,7 @@ def test_revision_reports_zero_days_for_a_lesson_completed_today(
 
 
 def test_creator_overview_buckets_todays_enrolment_in_today(
-    client, db_session
+    client, db_session, onboard
 ):
     """The daily chart must not drop today's rows into yesterday's bucket."""
     client.post("/v1/auth/register", json={
@@ -122,6 +122,9 @@ def test_creator_overview_buckets_todays_enrolment_in_today(
     ltok = client.post("/v1/auth/login", json={
         "email": "tz2-learner@example.com", "password": "password123",
     }).json()["access_token"]
+    # Enrolment is gated on onboarding; this learner registered inline, so finish
+    # setup before acting.
+    onboard("tz2-learner@example.com")
     client.post(f"/v1/me/enroll/{cid}", headers={"Authorization": f"Bearer {ltok}"})
 
     body = client.get("/v1/me/creator/analytics/overview?days=7",

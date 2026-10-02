@@ -162,6 +162,7 @@ def _list(items: list[str]) -> str:
 TEMPLATE_WELCOME = "welcome"
 TEMPLATE_PASSWORD_RESET = "password_reset"
 TEMPLATE_RECEIPT = "purchase_receipt"
+TEMPLATE_VERIFICATION = "email_verification"
 
 
 def welcome_email(name: str) -> tuple[str, str, str]:
@@ -247,6 +248,30 @@ def purchase_receipt_email(
         f"  Reference: {reference}\n\n"
         f"Start learning: {settings.frontend_url}/discover\n\n"
         "Keep this reference for any billing questions."
+    )
+    return subject, html, text
+
+
+def verification_email(verify_link: str) -> tuple[str, str, str]:
+    hours = 24
+    subject = "Confirm your email address"
+    html = _layout(
+        "Confirm your email",
+        f"One click and your account is ready. The link works once and "
+        f"expires in {hours} hours.",
+        [_note(
+            "If you did not sign up for Talyn, ignore this email — nothing "
+            "happens and no account was created."
+        )],
+        cta_label="Confirm my email",
+        cta_url=verify_link,
+    )
+    text = (
+        "Confirm your email address\n\n"
+        f"Open this link to confirm your address. It works once and expires "
+        f"in {hours} hours:\n\n{verify_link}\n\n"
+        "If you did not sign up for Talyn, ignore this email — nothing "
+        "happens and no account was created."
     )
     return subject, html, text
 

@@ -26,6 +26,23 @@ class User(Base):
     goals: Mapped[str] = mapped_column(String(500), default="")
     interests: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
 
+    # ── Onboarding ───────────────────────────────────────────────────────────
+    # When the address was proven. NULL means never: the account can sign in
+    # but has not completed verification, and onboarding stays closed.
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # How much time the learner said they want to give it: light | steady |
+    # deep | intensive. A key rather than "30-60 minutes" so the range and the
+    # study-plan default are derived in one place (app/core/onboarding.py).
+    # NULL until they choose.
+    learning_pace: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Set when pace and interests are recorded. The gate on enrol, missions and
+    # lesson progress reads this.
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

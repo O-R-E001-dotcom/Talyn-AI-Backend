@@ -68,6 +68,36 @@ def require_creator(
     return current_user
 
 
+def require_onboarding(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Refuse learning actions until pace and interests are recorded.
+
+    A hard gate, deliberately: pace seeds the study plan and interests drive
+    recommendations, so an account without them produces a worse product for
+    everyone downstream. 409 rather than 403 — the caller is authenticated and
+    allowed, they just have one step left to do, and the message says which.
+
+    Accounts that predate onboarding have `onboarding_completed_at` backfilled
+    by the migration, so this never locks an existing user out of their own
+    progress.
+    """
+    if current_user.onboarding_completed_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Finish setting up your account first: choose a learning pace "
+                "and pick your interests"
+                + (
+                    ", and confirm your email address"
+                    if current_user.email_verified_at is None
+                    else ""
+                )
+            ),
+        )
+    return current_user
+
+
 def can_manage_course(course, user: User) -> bool:
     """Owners manage their own courses; admins manage everything."""
     return user.is_admin or (

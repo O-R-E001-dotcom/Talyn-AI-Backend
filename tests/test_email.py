@@ -4,7 +4,6 @@ SMTP is replaced at the smtplib boundary, so the tests exercise the real
 message building, the real logging, and the real DB writes with no network
 and no configured mail server.
 """
-import email
 from email import policy
 
 import pytest
@@ -13,85 +12,6 @@ from app import config as config_module
 from app.models import EmailLog, PasswordResetToken, User
 from app.services import email as email_service
 from app.services import reset_tokens
-
-
-# ── Captured SMTP ────────────────────────────────────────────────────────────
-
-class _SMTP:
-    """Stand-in for smtplib.SMTP that records what it was asked to send."""
-
-    def __init__(self, state):
-        self.state = state
-        self.host = state["host"]
-        self.port = state["port"]
-        self.timeout = state["timeout"]
-        self.logged_in = False
-        self.starttls_used = False
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-    def starttls(self):
-        self.starttls_used = True
-
-    def login(self, user, password):
-        self.logged_in = True
-
-    def send_message(self, message):
-        if self.state["fail"]:
-            raise email_service.smtplib.SMTPException("mailbox unavailable")
-        self.state["sent"].append(message)
-
-
-@pytest.fixture
-def smtp(monkeypatch):
-    """Replace SMTP with a capture double.
-
-    State is shared across every client the service builds, so `smtp.fail()`
-    affects sends that happen after it is set rather than only ones already
-    in flight.
-    """
-    state = {
-        "sent": [], "fail": False, "host": None, "port": None,
-        "timeout": None, "last": None,
-    }
-
-    def factory(host, port, timeout=None, **kwargs):
-        state.update(host=host, port=port, timeout=timeout)
-        instance = _SMTP(state)
-        state["last"] = instance
-        return instance
-
-    monkeypatch.setattr(email_service.smtplib, "SMTP", factory)
-    monkeypatch.setattr(email_service.smtplib, "SMTP_SSL", factory)
-    monkeypatch.setattr(config_module.settings, "smtp_host", "smtp.talyn.dev")
-    monkeypatch.setattr(config_module.settings, "smtp_port", 587)
-    monkeypatch.setattr(config_module.settings, "smtp_username", "apikey")
-    monkeypatch.setattr(config_module.settings, "smtp_password", "secret")
-    monkeypatch.setattr(config_module.settings, "smtp_from",
-                        "Talyn <no-reply@talyn.dev>")
-
-    class Handle:
-        sent = state["sent"]
-
-        @property
-        def last(self):
-            return state["last"]
-
-        def fail(self):
-            state["fail"] = True
-
-    return Handle()
-
-
-@pytest.fixture
-def smtp_off(monkeypatch):
-    """No SMTP configured: the dev path that returns the token inline."""
-    monkeypatch.setattr(config_module.settings, "smtp_host", "")
-    monkeypatch.setattr(config_module.settings, "environment", "dev")
 
 
 def _last_text(message) -> str:
@@ -113,14 +33,48 @@ def _last_html(message) -> str:
 # ── Sending basics ───────────────────────────────────────────────────────────
 
 
-def test_welcome_email_is_sent_on_signup(client, smtp, db_session):
+def _verification_token(message) -> str:
+    """Pull the token out of the emailed verification link."""
+    import re
+
+    body = _last_text(message)
+    match = re.search(r"verify-email\?token=([^\s\"<]+)", body)
+    assert match, f"no verification link in the email: {body[:200]!r}"
+    return match.group(1)
+
+
+def test_signup_sends_one_verification_email_not_the_welcome(client, smtp,
+                                                            db_session):
+    """One email at signup, and it is the verification one.
+
+    The welcome is held back until the address is proven: thanking someone
+    for a signup we cannot yet attribute is worse than waiting, and two
+    emails in the same minute trains people to ignore your mail.
+    """
     client.post("/v1/auth/register", json={
         "email": "newbie@example.com", "password": "password123",
         "learner_name": "Newbie",
     })
     assert len(smtp.sent) == 1
-    assert smtp.sent[0]["Subject"] == "Welcome to Talyn"
-    assert "Newbie" in _last_text(smtp.sent[0])
+    assert smtp.sent[0]["Subject"] == "Confirm your email address"
+
+
+def test_welcome_arrives_after_the_address_is_confirmed(client, smtp,
+                                                       db_session):
+    client.post("/v1/auth/register", json={
+        "email": "newbie@example.com", "password": "password123",
+        "learner_name": "Newbie",
+    })
+    token = _verification_token(smtp.sent[0])
+
+    r = client.post("/v1/auth/email-verification/confirm",
+                    json={"token": token})
+    assert r.status_code == 200
+    assert r.json()["email_verified"] is True
+
+    assert len(smtp.sent) == 2
+    assert smtp.sent[1]["Subject"] == "Welcome to Talyn"
+    assert "Newbie" in _last_text(smtp.sent[1])
 
 
 def test_email_has_both_text_and_html_parts(client, smtp):
@@ -172,7 +126,7 @@ def test_send_returns_true_and_logs_sent(client, smtp, db_session):
     rows = db_session.query(EmailLog).all()
     assert len(rows) == 1
     assert rows[0].status == "sent"
-    assert rows[0].template == "welcome"
+    assert rows[0].template == "email_verification"
     assert rows[0].error is None
 
 
@@ -239,7 +193,7 @@ def test_email_log_survives_account_deletion(client, smtp, db_session):
     row = db_session.query(EmailLog).filter_by(
         to_email="leaving@example.com").one()
     assert row.user_id is None  # anonymized, not deleted
-    assert row.template == "welcome"
+    assert row.template == "email_verification"
 
 
 def test_reset_tokens_are_deleted_with_the_account(client, smtp, db_session):
@@ -556,7 +510,7 @@ def test_admin_can_read_the_email_log(client, admin_headers, smtp, db_session):
     assert rows.status_code == 200
     body = rows.json()
     assert any(r["to_email"] == "audited@example.com" for r in body)
-    assert body[0]["template"] == "welcome"
+    assert body[0]["template"] == "email_verification"
 
 
 def test_admin_can_filter_to_failures(client, admin_headers, smtp, db_session):

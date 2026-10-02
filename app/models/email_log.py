@@ -50,6 +50,34 @@ class PasswordResetToken(Base):
         return self.expires_at.timestamp() > datetime.now(self.expires_at.tzinfo).timestamp()
 
 
+class EmailVerificationToken(Base):
+    """One row per issued verification token. Only the hash is stored."""
+
+    __tablename__ = "email_verification_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # SET NULL: a deleted account must not keep verification tokens alive.
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # sha256 of the raw token, for the same reason as reset tokens: a database
+    # leak must not hand over working verification links.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    @property
+    def is_usable(self) -> bool:
+        if self.used_at is not None:
+            return False
+        return self.expires_at.timestamp() > datetime.now(self.expires_at.tzinfo).timestamp()
+
+
 class EmailLog(Base):
     """Audit trail of transactional sends, including the ones that failed."""
 

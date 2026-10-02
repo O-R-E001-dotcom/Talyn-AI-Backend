@@ -45,6 +45,15 @@ from app.schemas.progress import (
     XpEntry,
     XpSummary,
 )
+from app.schemas.onboarding import (
+    InterestOptionOut,
+    OnboardingCompleteIn,
+    OnboardingOptionsOut,
+    OnboardingStatusOut,
+    PaceOptionOut,
+    VerificationConfirmIn,
+    VerificationRequestIn,
+)
 from app.schemas.mission import (
     MISSION_STATUSES,
     BUDDY_MATCH_STATUSES,
@@ -138,6 +147,13 @@ __all__ = [
     "BuddyMatchCreate",
     "BuddyMatchRead",
     "BuddyMatchStatusUpdate",
+    "InterestOptionOut",
+    "OnboardingCompleteIn",
+    "OnboardingOptionsOut",
+    "OnboardingStatusOut",
+    "PaceOptionOut",
+    "VerificationConfirmIn",
+    "VerificationRequestIn",
     "MissionAdopt",
     "MissionCatalogRead",
     "MissionRead",

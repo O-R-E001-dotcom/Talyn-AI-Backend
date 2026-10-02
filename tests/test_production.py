@@ -5,7 +5,7 @@ from app import config as config_module
 
 
 @pytest.fixture()
-def auth_headers(client):
+def auth_headers(client, onboard):
     client.post(
         "/v1/auth/register",
         json={
@@ -18,8 +18,9 @@ def auth_headers(client):
         "/v1/auth/login",
         json={"email": "kwame@example.com", "password": "secret12345"},
     )
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
-
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    onboard(headers)
+    return headers
 
 @pytest.fixture()
 def smtp_settings(monkeypatch):

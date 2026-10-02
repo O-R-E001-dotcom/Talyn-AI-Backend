@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_onboarding
 from app.database import get_db
 from app.models import (
     Badge,
@@ -67,7 +67,7 @@ router = APIRouter(prefix="/me", tags=["Progress"])
 @router.post("/enroll/{course_id}", status_code=status.HTTP_201_CREATED)
 def enroll(
     course_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_onboarding),
     db: Session = Depends(get_db),
 ) -> dict:
     """Enroll the authenticated learner in a course."""
@@ -97,7 +97,7 @@ def enroll(
 def complete_lesson(
     lesson_id: int,
     payload: LessonCompleteRequest = LessonCompleteRequest(),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_onboarding),
     db: Session = Depends(get_db),
 ) -> dict:
     """Mark a lesson complete; awards lesson XP (once per lesson)."""
@@ -150,7 +150,7 @@ def complete_lesson(
 @router.post("/quiz-results", response_model=QuizSubmit)
 def submit_quiz(
     payload: QuizSubmit,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_onboarding),
     db: Session = Depends(get_db),
 ) -> QuizSubmit:
     """Record a quiz attempt and award quiz XP."""
@@ -312,7 +312,7 @@ def _maybe_complete_enrollment(db: Session, user: User, course_id: int) -> None:
 @router.post("/lessons/{lesson_id}/start")
 def start_lesson(
     lesson_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_onboarding),
     db: Session = Depends(get_db),
 ) -> dict:
     """Record that the learner started a lesson (idempotent, no XP)."""

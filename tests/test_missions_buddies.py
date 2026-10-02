@@ -22,9 +22,10 @@ def _register(client, email, name, is_creator=False):
 
 
 @pytest.fixture()
-def auth_headers(client):
-    return _register(client, "funke@example.com", "Funke")
-
+def auth_headers(client, onboard):
+    headers = _register(client, "funke@example.com", "Funke")
+    onboard(headers)
+    return headers
 
 @pytest.fixture()
 def buddy_headers(client):

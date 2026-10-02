@@ -14,9 +14,10 @@ def _register(client, email, name, is_creator=False):
 
 
 @pytest.fixture()
-def creator_headers(client):
-    return _register(client, "creator@example.com", "Creator", is_creator=True)
-
+def creator_headers(client, onboard):
+    headers = _register(client, "creator@example.com", "Creator", is_creator=True)
+    onboard(headers)
+    return headers
 
 @pytest.fixture()
 def creator2_headers(client):
@@ -24,9 +25,10 @@ def creator2_headers(client):
 
 
 @pytest.fixture()
-def learner_headers(client):
-    return _register(client, "plain@example.com", "Plain")
-
+def learner_headers(client, onboard):
+    headers = _register(client, "plain@example.com", "Plain")
+    onboard(headers)
+    return headers
 
 @pytest.fixture()
 def course_id(client, creator_headers):

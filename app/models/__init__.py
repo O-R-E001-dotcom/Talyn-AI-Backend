@@ -11,7 +11,11 @@ from app.models.mission import (
 from app.models.buddy import BuddyMatch
 from app.models.conversation import ConversationMessage
 from app.models.admin import AdminAuditLog
-from app.models.email_log import EmailLog, PasswordResetToken
+from app.models.email_log import (
+    EmailLog,
+    EmailVerificationToken,
+    PasswordResetToken,
+)
 from app.models.creator import CreatorProfile
 from app.models.asset import LessonAsset
 from app.models.payment import Payment
@@ -38,6 +42,7 @@ __all__ = [
     "AdminAuditLog",
     "EmailLog",
     "PasswordResetToken",
+    "EmailVerificationToken",
     "CreatorProfile",
     "LessonAsset",
     "Payment",

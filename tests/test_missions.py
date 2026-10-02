@@ -33,13 +33,14 @@ def _register(client, email, name="Someone", is_creator=False) -> dict:
 
 
 @pytest.fixture
-def creator_headers(client):
+def creator_headers(client, onboard):
     _register(client, "mission-creator@example.com", "Creator", is_creator=True)
     r = client.post("/v1/auth/login", json={
         "email": "mission-creator@example.com", "password": "password123",
     })
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
-
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    onboard(headers)
+    return headers
 
 @pytest.fixture
 def other_creator_headers(client):
@@ -51,13 +52,14 @@ def other_creator_headers(client):
 
 
 @pytest.fixture
-def learner_headers(client):
+def learner_headers(client, onboard):
     _register(client, "mission-learner@example.com", "Ade")
     r = client.post("/v1/auth/login", json={
         "email": "mission-learner@example.com", "password": "password123",
     })
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
-
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    onboard(headers)
+    return headers
 
 def _published_template(client, creator_headers) -> dict:
     r = client.post("/v1/creator/missions", json=TEMPLATE_BODY,
@@ -148,7 +150,7 @@ def test_adopting_gives_the_learner_a_mission_with_its_own_steps(
 
 
 def test_progress_is_not_shared_between_learners(client, creator_headers,
-                                                  learner_headers):
+                                                  learner_headers, onboard):
     """The reason adoption copies: linking would let one learner complete a
     step for everybody."""
     _register(client, "second-learner@example.com", "Bola")
@@ -156,6 +158,8 @@ def test_progress_is_not_shared_between_learners(client, creator_headers,
         "email": "second-learner@example.com", "password": "password123",
     }).json()
     hb = {"Authorization": f"Bearer {login['access_token']}"}
+    # Adopting a mission is gated on onboarding.
+    onboard(hb)
 
     template = _published_template(client, creator_headers)
     m_a = client.post("/v1/me/missions", json={"template_id": template["id"]},

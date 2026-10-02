@@ -14,15 +14,17 @@ def _register(client, email, name, is_creator=False):
 
 
 @pytest.fixture()
-def creator_headers(client):
-    return _register(client, "pay-creator@example.com", "PayCreator",
-                     is_creator=True)
-
+def creator_headers(client, onboard):
+    headers = _register(client, "pay-creator@example.com", "PayCreator",
+                          is_creator=True)
+    onboard(headers)
+    return headers
 
 @pytest.fixture()
-def learner_headers(client):
-    return _register(client, "payer@example.com", "Payer")
-
+def learner_headers(client, onboard):
+    headers = _register(client, "payer@example.com", "Payer")
+    onboard(headers)
+    return headers
 
 @pytest.fixture()
 def paid_course_id(client, creator_headers, db_session):

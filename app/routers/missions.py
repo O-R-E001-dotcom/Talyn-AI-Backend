@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.deps import get_current_user, optional_user
+from app.core.deps import get_current_user, require_onboarding, optional_user
 from app.database import get_db
 from app.models import Badge, Mission, MissionStep, MissionTemplate, User
 from app.schemas.mission import (
@@ -132,7 +132,7 @@ def browse_catalogue(
 @router.post("", response_model=MissionRead, status_code=status.HTTP_201_CREATED)
 def adopt_mission(
     payload: MissionAdopt,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_onboarding),
     db: Session = Depends(get_db),
 ) -> Mission:
     """Adopt a published mission from the catalogue.
@@ -259,7 +259,7 @@ def update_mission_status(
 def complete_step(
     mission_id: int,
     step_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_onboarding),
     db: Session = Depends(get_db),
 ) -> dict:
     """Complete one mission step. Finishing the last step completes the mission."""
